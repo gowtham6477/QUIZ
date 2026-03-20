@@ -1,15 +1,17 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../ThemeContext";
+import { useAuth } from "../auth/AuthContext";
 
 function Navbar() {
 
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
+  const { user, logout } = useAuth();
 
   return (
     <div style={styles.navbar}>
-      <h2 style={styles.logo}>Quiz Website</h2>
+      <h2 style={styles.logo} onClick={() => navigate("/")}>Quiz.com</h2>
 
       <div style={styles.rightSection}>
         <button
@@ -27,9 +29,24 @@ function Navbar() {
           </span>
         </button>
 
-        <button style={styles.loginButton} onClick={() => navigate("/login")}>
-          Login
-        </button>
+        {user?.role === "ADMIN" && (
+          <button style={styles.adminButton} onClick={() => navigate("/admin")}>Admin</button>
+        )}
+        {user ? (
+          <button
+            style={styles.logoutButton}
+            onClick={() => {
+              logout();
+              navigate("/login");
+            }}
+          >
+            Logout
+          </button>
+        ) : (
+          <button style={styles.loginButton} onClick={() => navigate("/login")}>
+            Login
+          </button>
+        )}
       </div>
     </div>
   );
@@ -57,7 +74,8 @@ const styles = {
     fontWeight: 700,
     color: "var(--text-primary)",
     letterSpacing: "-0.5px",
-    transition: "color 0.4s ease"
+    transition: "color 0.4s ease",
+    cursor: "pointer"
   },
 
   rightSection: {
@@ -111,6 +129,28 @@ const styles = {
     fontSize: "14px",
     letterSpacing: "0.1px",
     transition: "background-color 0.3s ease"
+  },
+
+  adminButton: {
+    padding: "8px 18px",
+    cursor: "pointer",
+    background: "var(--bg-option)",
+    color: "var(--text-primary)",
+    border: "1px solid var(--border)",
+    borderRadius: "980px",
+    fontWeight: 600,
+    fontSize: "14px"
+  },
+
+  logoutButton: {
+    padding: "8px 18px",
+    cursor: "pointer",
+    background: "var(--bg-option)",
+    color: "var(--text-primary)",
+    border: "1px solid var(--border)",
+    borderRadius: "980px",
+    fontWeight: 600,
+    fontSize: "14px"
   }
 };
 

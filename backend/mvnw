@@ -1,0 +1,30 @@
+#!/bin/sh
+# ----------------------------------------------------------------------------
+# Maven Wrapper script (Unix)
+# ----------------------------------------------------------------------------
+
+MVNW_REPOURL="https://repo.maven.apache.org/maven2"
+
+basedir=$(cd "$(dirname "$0")"; pwd -P)
+
+if [ -z "$JAVA_HOME" ]; then
+  JAVA_EXEC="java"
+else
+  JAVA_EXEC="$JAVA_HOME/bin/java"
+fi
+
+MAVEN_WRAPPER_JAR="$basedir/.mvn/wrapper/maven-wrapper.jar"
+MAVEN_WRAPPER_PROPERTIES="$basedir/.mvn/wrapper/maven-wrapper.properties"
+
+if [ ! -f "$MAVEN_WRAPPER_JAR" ]; then
+  if [ ! -f "$basedir/.mvn/wrapper/MavenWrapperDownloader.java" ]; then
+    echo "Missing MavenWrapperDownloader.java" >&2
+    exit 1
+  fi
+  "$JAVA_EXEC" "$basedir/.mvn/wrapper/MavenWrapperDownloader.java" "$basedir"
+fi
+
+exec "$JAVA_EXEC" \
+  -classpath "$MAVEN_WRAPPER_JAR" \
+  -Dmaven.multiModuleProjectDirectory="$basedir" \
+  org.apache.maven.wrapper.MavenWrapperMain "$@"

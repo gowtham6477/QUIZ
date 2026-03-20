@@ -1,21 +1,30 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 
 function LoginPage() {
 
   const navigate = useNavigate();
+  const { login } = useAuth();
+  const { user } = useAuth();
+  useEffect(() => {
+    if (user) {
+      navigate(user.role === "ADMIN" ? "/admin" : "/quiz-selection");
+    }
+  }, [user, navigate]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
 
-    // Later we will connect this with backend
-    console.log("Email:", email);
-    console.log("Password:", password);
-
-    navigate("/quiz-selection");
+    try {
+      const data = await login(email, password);
+      navigate(data.role === "ADMIN" ? "/admin" : "/quiz-selection");
+    } catch (error) {
+      alert(error.message);
+    }
   };
 
   return (

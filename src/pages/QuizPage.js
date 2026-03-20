@@ -1,48 +1,96 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { apiFetch } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 
 function QuizPage() {
 
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
-  const quizType = location.state?.quizType || "Quiz";
-
-  const questions = [
-    {
-      question: "What is 2 + 2?",
-      options: ["2", "3", "4", "5"],
-      answer: "4"
-    },
-    {
-      question: "What is 5 × 3?",
-      options: ["15", "10", "20", "25"],
-      answer: "15"
-    },
-    {
-      question: "What is 10 - 4?",
-      options: ["3", "4", "5", "6"],
-      answer: "6"
-    }
-  ];
+  const quizId = location.state?.quizId;
+  const quizType = location.state?.quizTitle || "Quiz";
+  const [questions, setQuestions] = useState([]);
 
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [timeLeft, setTimeLeft] = useState(1200); // 20 minutes
-
-  // TIMER
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [showFinishConfirm, setShowFinishConfirm] = useState(false);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
-    if (timeLeft === 0) {
-      finishQuiz();
+    if (!quizId) {
+      navigate("/quiz-selection");
+      return;
+    }
+    if (!user) {
+      navigate("/login");
       return;
     }
 
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => prev - 1);
-    }, 1000);
+    const loadQuiz = async () => {
+      try {
+        const attempts = await apiFetch("/quizzes/attempts");
+        if (Array.isArray(attempts) && attempts.includes(quizId)) {
+          alert("You already attempted this quiz.");
+          navigate("/quiz-selection");
+          return;
+        }
+        const data = await apiFetch(`/quizzes/${quizId}`);
+        setQuestions(data.questions || []);
+      } catch (error) {
+        alert(error.message);
+        navigate("/quiz-selection");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    return () => clearInterval(timer);
-  }, [timeLeft]);
+    loadQuiz();
+  }, [quizId, user, navigate]);
+
+  useEffect(() => {
+    if (!questions.length) {
+      return;
+    }
+    const totalMinutes = Math.max(1, questions.length);
+    setTimeLeft(totalMinutes * 60);
+  }, [questions.length]);
+
+  useEffect(() => {
+    const requestFullScreen = async () => {
+      try {
+        if (!document.fullscreenElement) {
+          await document.documentElement.requestFullscreen();
+        }
+      } catch (error) {
+        // ignore fullscreen errors
+      }
+    };
+    requestFullScreen();
+
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    const handlePopState = () => {
+      window.history.pushState(null, "", window.location.href);
+      setShowFinishConfirm(true);
+    };
+
+    window.history.pushState(null, "", window.location.href);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("popstate", handlePopState);
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+  }, []);
 
   const formatTime = () => {
     const minutes = Math.floor(timeLeft / 60);
@@ -57,27 +105,64 @@ function QuizPage() {
     });
   };
 
-  const finishQuiz = () => {
+  const finishQuiz = useCallback(async () => {
+    try {
+      const payload = {
+        answers: Object.keys(answers).map((index) => ({
+          questionId: questions[index].id,
+          selectedOption: answers[index]
+        }))
+      };
 
-    let score = 0;
+      const result = await apiFetch(`/quizzes/${quizId}/submit`, {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
 
-    questions.forEach((q, index) => {
-      if (answers[index] === q.answer) {
-        score++;
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
       }
-    });
+      navigate("/result", {
+        state: {
+          score: result.score,
+          total: result.total,
+          attempted: Object.keys(answers).length,
+          quizId,
+          correctAnswers: result.correctAnswers
+        }
+      });
+    } catch (error) {
+      alert(error.message);
+    }
+  }, [answers, navigate, questions, quizId]);
 
-    navigate("/result", {
-      state: {
-        score: score,
-        total: questions.length,
-        attempted: Object.keys(answers).length
-      }
-    });
-  };
+  // TIMER
+  useEffect(() => {
+    if (!questions.length) {
+      return;
+    }
+    if (timeLeft === 0) {
+      finishQuiz();
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft, finishQuiz, questions.length]);
 
   const isLowTime = timeLeft <= 60;
   const optionLabels = ["A", "B", "C", "D"];
+
+  if (loading) {
+    return <div style={{ padding: "40px", textAlign: "center" }}>Loading quiz...</div>;
+  }
+
+  if (!questions.length) {
+    return <div style={{ padding: "40px", textAlign: "center" }}>No questions available.</div>;
+  }
 
   return (
     <div>
@@ -115,12 +200,17 @@ function QuizPage() {
 
           <div style={styles.questionCard}>
             <h3 style={styles.questionText}>
-              Q{currentQuestion + 1}. {questions[currentQuestion].question}
+              Q{currentQuestion + 1}. {questions[currentQuestion].questionText}
             </h3>
 
             <div style={styles.optionsGrid}>
-              {questions[currentQuestion].options.map((option, index) => {
-                const isSelected = answers[currentQuestion] === option;
+              {[
+                questions[currentQuestion].optionA,
+                questions[currentQuestion].optionB,
+                questions[currentQuestion].optionC,
+                questions[currentQuestion].optionD
+              ].map((option, index) => {
+                const isSelected = answers[currentQuestion] === optionLabels[index];
                 return (
                   <div
                     key={index}
@@ -136,7 +226,7 @@ function QuizPage() {
                         ? "0 4px 16px rgba(0, 113, 227, 0.2)"
                         : "var(--shadow-sm)"
                     }}
-                    onClick={() => selectOption(option)}
+                    onClick={() => selectOption(optionLabels[index])}
                   >
                     <div style={{
                       ...styles.optionLetter,
@@ -148,7 +238,7 @@ function QuizPage() {
                     <input
                       type="radio"
                       checked={isSelected}
-                      onChange={() => selectOption(option)}
+                      onChange={() => selectOption(optionLabels[index])}
                       style={{ display: "none" }}
                     />
                     <label style={{
@@ -240,13 +330,35 @@ function QuizPage() {
             </button>
           </div>
 
-          <button style={styles.endButton} onClick={finishQuiz}>
+          <button style={styles.endButton} onClick={() => setShowFinishConfirm(true)}>
             End Test
           </button>
 
         </div>
 
       </div>
+
+      {showFinishConfirm && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalCard}>
+            <h3 style={styles.modalTitle}>Finish quiz?</h3>
+            <p style={styles.modalText}>
+              Attempted: {Object.keys(answers).length} · Not attempted: {questions.length - Object.keys(answers).length}
+            </p>
+            <p style={styles.modalSubtext}>
+              Are you sure you want to finish and submit your answers?
+            </p>
+            <div style={styles.modalActions}>
+              <button style={styles.modalSecondary} onClick={() => setShowFinishConfirm(false)}>
+                Continue Test
+              </button>
+              <button style={styles.modalPrimary} onClick={finishQuiz}>
+                Finish Quiz
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
@@ -485,6 +597,74 @@ const styles = {
     boxShadow: "0 4px 16px rgba(255, 59, 48, 0.2)",
     transition: "background-color 0.3s ease",
     letterSpacing: "0.3px"
+  },
+
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(15, 23, 42, 0.6)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2000,
+    backdropFilter: "blur(6px)"
+  },
+
+  modalCard: {
+    width: "min(520px, 92vw)",
+    background: "var(--bg-card)",
+    borderRadius: "var(--radius-lg)",
+    padding: "28px 30px",
+    border: "1px solid var(--border)",
+    boxShadow: "var(--shadow-lg)",
+    textAlign: "center"
+  },
+
+  modalTitle: {
+    margin: "0 0 10px",
+    fontSize: "22px",
+    fontWeight: 700,
+    color: "var(--text-primary)"
+  },
+
+  modalText: {
+    margin: "0 0 6px",
+    fontSize: "15px",
+    fontWeight: 600,
+    color: "var(--text-primary)"
+  },
+
+  modalSubtext: {
+    margin: "0 0 20px",
+    fontSize: "14px",
+    color: "var(--text-secondary)"
+  },
+
+  modalActions: {
+    display: "flex",
+    justifyContent: "center",
+    gap: "12px",
+    flexWrap: "wrap"
+  },
+
+  modalSecondary: {
+    padding: "10px 18px",
+    borderRadius: "999px",
+    border: "1px solid var(--border)",
+    background: "var(--bg-option)",
+    color: "var(--text-primary)",
+    fontWeight: 600,
+    cursor: "pointer"
+  },
+
+  modalPrimary: {
+    padding: "10px 18px",
+    borderRadius: "999px",
+    border: "none",
+    background: "var(--accent)",
+    color: "#fff",
+    fontWeight: 700,
+    cursor: "pointer"
   }
 };
 

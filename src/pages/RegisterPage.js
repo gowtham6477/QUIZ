@@ -1,9 +1,17 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 
 function RegisterPage() {
 
   const navigate = useNavigate();
+  const { register } = useAuth();
+  const { user } = useAuth();
+  useEffect(() => {
+    if (user) {
+      navigate("/quiz-selection");
+    }
+  }, [user, navigate]);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -21,7 +29,7 @@ function RegisterPage() {
     });
   };
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
 
     if (formData.password !== formData.confirmPassword) {
@@ -29,11 +37,17 @@ function RegisterPage() {
       return;
     }
 
-    console.log(formData);
-
-    // Later this will send data to Spring Boot backend
-
-    navigate("/quiz-selection");
+    try {
+      await register(
+        formData.name,
+        formData.email,
+        formData.password,
+        formData.college
+      );
+      navigate("/quiz-selection");
+    } catch (error) {
+      alert(error.message);
+    }
   };
 
   return (

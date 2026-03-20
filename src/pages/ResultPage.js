@@ -1,14 +1,44 @@
-import React from "react";
-import { useLocation } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { PieChart, Pie, Cell, Tooltip } from "recharts";
+import { apiFetch } from "../api/client";
 
 function ResultPage() {
 
   const location = useLocation();
+  const navigate = useNavigate();
 
   const score = location.state?.score || 0;
   const total = location.state?.total || 0;
   const attempted = location.state?.attempted || 0;
+  const quizId = location.state?.quizId;
+
+  const [leaderboard, setLeaderboard] = useState([]);
+
+  useEffect(() => {
+    if (!quizId) {
+      return;
+    }
+    const loadLeaderboard = async () => {
+      try {
+        const data = await apiFetch(`/leaderboard?quizId=${quizId}`);
+        setLeaderboard(data || []);
+      } catch (error) {
+        setLeaderboard([]);
+      }
+    };
+
+    loadLeaderboard();
+  }, [quizId]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      navigate("/", { replace: true });
+    };
+    window.history.pushState(null, "", window.location.href);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [navigate]);
 
   const unattempted = total - attempted;
   const wrong = attempted - score;
@@ -23,11 +53,6 @@ function ResultPage() {
     { name: "Wrong", value: wrong }
   ];
 
-  const leaderboard = [
-    { name: "Sangeetha", college: "ABC College", time: "10 min", rank: 1 },
-    { name: "Rahul", college: "XYZ College", time: "12 min", rank: 2 },
-    { name: "Priya", college: "DEF College", time: "15 min", rank: 3 }
-  ];
 
   const rankBadge = (rank) => {
     const medals = { 1: "🥇", 2: "🥈", 3: "🥉" };
@@ -119,15 +144,17 @@ function ResultPage() {
         <tbody>
           {leaderboard.map((user, index) => (
             <tr key={index}>
-              <td style={styles.nameCell}>{user.name}</td>
-              <td>{user.college}</td>
-              <td>{user.time}</td>
-              <td style={styles.rankCell}>{rankBadge(user.rank)}</td>
+              <td style={styles.nameCell}>{user.username}</td>
+              <td>{user.college || "—"}</td>
+              <td>{user.score}/{user.total}</td>
+              <td style={styles.rankCell}>{rankBadge(index + 1)}</td>
             </tr>
           ))}
         </tbody>
 
       </table>
+
+      <button style={styles.homeButton} onClick={() => navigate("/")}>Back to Home</button>
 
     </div>
   );
@@ -157,6 +184,18 @@ const styles = {
     marginBottom: "8px",
     animation: "fadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both",
     transition: "color 0.4s ease"
+  },
+
+  homeButton: {
+    marginTop: "28px",
+    padding: "12px 26px",
+    borderRadius: "999px",
+    border: "none",
+    background: "var(--accent)",
+    color: "#fff",
+    fontWeight: 700,
+    cursor: "pointer",
+    boxShadow: "var(--shadow-md)"
   },
 
   chartContainer: {

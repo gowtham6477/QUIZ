@@ -1,8 +1,10 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 
 function HomePage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   return (
     <div style={styles.wrapper}>
@@ -15,7 +17,10 @@ function HomePage() {
           Track your scores and compete on the leaderboard.
         </p>
         <div style={styles.buttonRow}>
-          <button style={styles.ctaButton} onClick={() => navigate("/login")}>
+          <button
+            style={styles.ctaButton}
+            onClick={() => navigate(user ? "/quiz-selection" : "/login")}
+          >
             Get Started
           </button>
           <button style={styles.secondaryButton} onClick={() => navigate("/register")}>
